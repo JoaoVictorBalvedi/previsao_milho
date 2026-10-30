@@ -3,6 +3,67 @@
 Preço semanal do milho (R$/saca 60 kg) nas praças do Paraná, de 2001 a 2025.
 Alvo: `media_pr` (média simples das praças).
 
+## Interface no navegador (Docker)
+
+O jeito mais fácil de usar: precisa só do [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+```bash
+docker compose up --build     # ou: make docker
+```
+
+Depois abra **http://localhost:8000**. A primeira vez demora alguns minutos, porque baixa o Python,
+o torch e as bibliotecas. Nas próximas, `docker compose up` sobe em segundos. Para parar:
+`docker compose down`. Os dados ficam guardados; `docker compose down -v` apaga o banco.
+
+Na interface:
+
+- **Todas as opções da v5:** produto (milho/soja), frequência (diária/semanal), teste passo a passo
+  ou cego, horizonte, modelos (por família ou um a um), parte da série usada no treino, janela de
+  treino e janela de entrada.
+- **Previsão já feita não treina de novo.** Cada pedido gera uma chave a partir das opções e da
+  versão dos dados. Se essa chave já foi calculada, o resultado salvo aparece na hora. O botão
+  **Treinar de novo** ignora o que está salvo e treina outra vez. Se os dados mudarem (planilha nova
+  da soja, por exemplo), a chave muda e o treino é refeito.
+- **Treino em segundo plano.** Os pedidos entram numa fila e rodam um de cada vez. O andamento aparece ao vivo
+  e pode ser cancelado. Dá para fechar a página e voltar depois: o **Histórico** guarda tudo.
+- **Resultado:**
+  - indicadores principais;
+  - gráfico da previsão para os próximos dias/semanas;
+  - gráfico real × previsto no período de teste;
+  - tabela de métricas, onde a caixa de cada modelo liga e desliga o modelo nos gráficos;
+  - os PNGs do script;
+  - downloads em CSV.
+- **Dados:** a planilha nova do CEPEA (soja) pode ser enviada pela própria página.
+
+**Banco de dados (PostgreSQL).** Na primeira subida, as séries dos CSVs (`dados_milho/`
+e `dados_soja/`) são copiadas para o banco. A partir daí, o banco é a fonte dos dados.
+
+| Tabela | O que guarda |
+|---|---|
+| `precos` | as séries de milho e soja, diárias e semanais, uma linha por data e coluna |
+| `execucoes` | cada pedido: opções, chave, status, log do treino e horários |
+| `previsoes` | as previsões do período de teste de cada execução |
+| `metricas` | as métricas por modelo |
+| `futuro` | a previsão para depois da última data |
+| `graficos` | os PNGs gerados pela v5 |
+
+Para abrir o banco num cliente (DBeaver, pgAdmin), use `localhost:5433`, banco `previsao`, usuário e
+senha `tcc`.
+
+**Como funciona por dentro (`app/`).**
+
+- `main.py` é a API (FastAPI).
+- `banco.py` define as tabelas (SQLAlchemy).
+- `execucao.py` cuida da fila e da chave de reaproveitamento.
+- `static/` tem a página (HTML/CSS/JS, gráficos com Chart.js).
+
+O treino continua sendo a v5 (`v5_diario_semanal/previsao.py`), chamada como subprocesso. A série
+sai do banco para um CSV temporário e os resultados voltam para o banco. A linha de comando continua
+funcionando igual.
+
+**Sem Docker:** `make app` (ou `uvicorn app.main:app`) usa um arquivo SQLite (`app/previsao.db`) no
+lugar do PostgreSQL.
+
 ## Passo a passo rápido
 
 Abra o terminal **nesta pasta** (a que tem o `Makefile`) e rode:
@@ -23,12 +84,14 @@ vão para a pasta `outputs/` de cada versão.
 | Comando | O que faz | Tempo |
 |---|---|---|
 | `make setup` | Cria `.venv` (Python 3.12) e instala `requirements.txt` | ~2 min |
-| `make dados` | Regera `dados/milho_semanal.csv` a partir das planilhas do SIMA | ~1 min |
+| `make dados` | Regera `dados_milho/milho_semanal.csv` a partir das planilhas do SIMA | ~1 min |
 | `make professor` | Roda o script original do professor (v2) | ~10 s |
 | `make holdout` | Holdout 80/20, previsão 1 semana à frente (v4) | ~20 s |
 | `make holdout H=4` | O mesmo, 4 semanas à frente (vale qualquer valor de 1 a 52) | ~2 min (H=12: ~5 min) |
 | `make holdout-cego` | Holdout 80/20 com uma única previsão para os 20% inteiros | ~1 min |
 | `make holdout-todos` | Holdout em 1, 4 e 12 semanas + cego | ~8 min |
+| `make v5 H=5` | Holdout na série **diária** (ou `FREQ=semanal`), H passos à frente, + previsão futura (v5) | ~3 min sem Chronos, ~12 min com |
+| `make v5-comparar` | Compara diária x semanal nas rodadas da v5 | segundos |
 | `make backtest` | Backtest de 2023 a 2025 em 1, 4, 12 e 26 semanas (v3) | ~7 min |
 | `make backtest-rapido` | Backtest com menos datas e sem Chronos | ~1 min |
 | `make reavaliar` | Recalcula métricas, combinações e gráficos de todos os testes, sem rodar modelos | segundos |
@@ -60,6 +123,107 @@ make backtest MODELOS=PROF
 ```
 
 Na primeira vez que um modelo Chronos roda, ele é baixado da internet (~200 MB).
+
+## v5: previsão diária ou semanal
+
+`make v5` faz o mesmo holdout 80/20 da v4, mas deixa escolher a série:
+
+| Opção | Série | Um passo (`H`, `ENTRADA`) | `H` vai de |
+|---|---|---|---|
+| `FREQ=diaria` (padrão do `make v5`) | `dados_milho/milho_diario.csv`, preço de cada dia | 1 dia útil com cotação (~240 por ano) | 1 a 240 |
+| `FREQ=semanal` | `dados_milho/milho_semanal.csv`, média da semana | 1 semana | 1 a 52 |
+
+```bash
+make v5 H=5                       # diária, 5 dias úteis (~1 semana) à frente
+make v5 H=1,5,20,60               # vários horizontes numa chamada só
+make v5 FREQ=semanal H=4          # semanal: dá o mesmo resultado que make holdout H=4, só que bem mais rápido
+make v5-cego                      # diária, uma previsão única para os 20% finais
+make v5 H=5 ENTRADA=20 JANELA=10  # olha os últimos 20 dias, treina com 10 anos
+make v5-comparar                  # compara diária x semanal em todas as rodadas já feitas
+```
+
+Valem todas as opções da v4 (`MODELOS`, `LIMPAR`, `TREINO`, `JANELA`, `ENTRADA`). Resultados em
+`v5_diario_semanal/outputs/<diaria|semanal>/passo_hNN/` (ou `cego/`), com os mesmos arquivos da v4.
+
+**Como os modelos se adaptam à série diária.** As janelas cobrem o mesmo tempo de calendário que
+na semanal (1 semana = 5 dias úteis, 1 mês = 20, 1 ano = 240):
+
+- Professor (PROF_, PROFVAR_): lags de 1, 2, 3, 4, 5, 10, 20, 60, 120 e 240 dias e médias/desvios/mín/máx
+  móveis de 5 a 240 dias. O `diff_52` do script dele continua sendo de 52 passos.
+- Retorno (RET_): variações dos últimos 5 dias e de 10 e 20 dias atrás, variação acumulada em
+  5/20/60/120/240 dias, volatilidade e distância da média; sazonalidade pelo dia do ano.
+- SNAIVE: o preço do mesmo dia no ano anterior. O Chronos recebe a série diária sem mudança.
+
+**Previsão recursiva mais rápida.** A previsão recursiva do professor recalcula as variáveis da série
+inteira a cada passo. Na série diária, com ~1150 datas de teste, isso levaria horas. A v5 faz a mesma
+conta para todas as datas de uma vez (`previsao_recursiva()`). Ela foi conferida contra o original:
+as diferenças ficam abaixo de 1e-10. Na semanal a v5 reproduz a v4 e roda em segundos: 9 s, contra
+217 s da v4 para H=4 com 7 modelos.
+
+**Previsão para o futuro.** No modo passo, depois do holdout os modelos são retreinados com a série
+inteira e preveem os H passos seguintes à última data. Saem `previsao_futura.csv` (com faixa de 80%
+do Chronos e variação % sobre o último preço) e `06_previsao_futura.png`. A tabela mostra cada
+previsão ao lado do erro do modelo no holdout, que diz em qual delas confiar. Para pular essa
+etapa: `--sem-futuro`.
+
+**Comparação diária x semanal (`make v5-comparar`).** O script junta as rodadas, converte o
+horizonte para semanas (5 dias úteis = 1) e gera `comparacao_frequencias.csv` e `.png`. Os alvos não
+são iguais: a semanal prevê a *média* da semana, que é mais suave. Por isso, para comparar as duas,
+use o erro relativo ao ingênuo de cada uma, não o MAPE.
+
+Primeiro teste (holdout, modelos BASE/RET/PROF_RIDGE/PROF_ELASTICNET), erro relativo ao ingênuo do
+melhor modelo:
+
+| Horizonte | Diária | Semanal |
+|---|---|---|
+| 1 dia | 0,93* (COMBO_MEDIANA) | — |
+| ~1 semana | 0,93 (RET_EXTRATREES; H=5) | 0,89* (COMBO_MEDIANA; H=1) |
+| ~1 mês | 0,97 (COMBO_NAIVE_RET; H=20) | 0,95 (COMBO_NAIVE_RET; H=4) |
+
+\* diferença significativa (Diebold-Mariano, p < 0,05). Na diária com todos os modelos e H=5,
+`COMBO_NAIVE_RET` (0,93) e `COMBO_LINEARES` (0,95) também ganham do ingênuo de forma significativa.
+As árvores do professor falham na diária pelo mesmo motivo do holdout semanal (preço do teste acima
+do máximo do treino). Os dois Chronos ficam atrás do ingênuo na diária: CHRONOS_BOLT_SMALL tem 1,05
+e CHRONOS_2 tem 1,25 (pior, p < 0,05).
+
+### Milho ou soja (`PRODUTO=soja`)
+
+A v5 também treina e testa com o preço da **soja**: o indicador CEPEA/ESALQ Paraná à vista, em
+R$/saca de 60 kg, diário de jan/2005 a out/2026.
+
+```bash
+make dados-soja                         # 1ª vez (ou ao baixar planilha nova): gera dados_soja/soja_*.csv
+make v5 PRODUTO=soja H=5                # soja diária, 5 dias úteis à frente
+make v5 PRODUTO=soja FREQ=semanal H=4
+make v5-comparar PRODUTO=soja           # diária x semanal da soja
+```
+
+- A planilha baixada do CEPEA vai em `dados_soja/cepea-*.xls`. `dados_soja/extrair_soja.py` lê a
+  mais recente e grava `soja_diario.csv` (data, `preco_rs`, `preco_usd`) e `soja_semanal.csv`
+  (média da semana até a sexta, como o milho). As planilhas do CEPEA vêm com um defeito no arquivo
+  que o pandas recusa; o script lê com o `xlrd` ignorando o defeito.
+- O alvo é `preco_rs`. A soja não tem praças, então os modelos não têm as variáveis auxiliares
+  (`aux_*` do professor, dispersão entre praças dos RET_). O preço em US$ fica no CSV, mas não
+  entra nos modelos.
+- O holdout 80/20 da soja treina de jan/2005 a jun/2022 e testa de jun/2022 a out/2026 (diária:
+  4355 / 1089 dias).
+- Resultados em `v5_diario_semanal/outputs_soja/` (e `outputs_soja_janela10/` etc.). Os do milho
+  continuam em `outputs/`.
+
+Primeiro teste com a soja (sem Chronos), erro relativo ao ingênuo:
+
+| Modelo | Diária, H=5 | Semanal, H=4 |
+|---|---|---|
+| COMBO_NAIVE_RET | 0,98 | **0,93*** |
+| RET_RIDGE | 0,99 | 0,96 |
+| RET_EXTRATREES | 1,00 | 0,95 |
+| PROF_RIDGE | 1,07 (pior*) | 1,18 (pior*) |
+| CHRONOS_BOLT_SMALL | — | 1,02 |
+| Árvores do professor (PROF_) | 3,1 a 11,3 | 3,1 a 10,7 |
+| Árvores prevendo variação (PROFVAR_) | 1,6 a 3,6 | 1,2 a 2,9 |
+
+A soja é mais difícil de bater que o milho na série diária. Na semanal, a combinação NAIVE + RET
+ganha do ingênuo de forma significativa, como no milho.
 
 ## Os dois tipos de teste
 
@@ -243,15 +407,23 @@ estável de todas, mas com só 39 datas a diferença não é significativa. Só 
 ```
 Makefile                comandos (make ajuda)
 requirements.txt
-dados/
+dados_milho/
   brutos/sima/          planilhas originais do SIMA, uma pasta por ano
   extrair_milho.py      lê as planilhas e gera os CSVs abaixo
   milho_diario.csv      preço diário por praça
   milho_semanal.csv     média semanal (semana terminando na sexta)
+app/                    interface web (FastAPI + banco); ver "Interface no navegador"
+Dockerfile, docker-compose.yml
+dados_soja/
+  cepea-*.xls           planilha baixada do CEPEA (indicador da soja, Paraná)
+  extrair_soja.py       lê a planilha e gera soja_diario.csv e soja_semanal.csv
 v1_janelas_ml/          1ª versão: KNN/RF/Ridge sobre janelas de 200 semanas (sem avaliação)
 v2_modelo_professor/    script do professor (teste de 1 passo nas últimas 52 semanas)
 v3_backtest/            backtest em várias datas, vários horizontes
 v4_holdout/             holdout 80/20 (usa as funções do v3)
+v5_diario_semanal/      holdout 80/20 diário ou semanal + previsão futura (usa v3 e v4)
+  previsao.py           o holdout (make v5)
+  comparar.py           compara as frequências (make v5-comparar)
 notebooks/              exploração
 ```
 

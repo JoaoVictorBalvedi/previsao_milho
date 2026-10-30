@@ -196,12 +196,14 @@ def cor_modelo(m):
     return bt.COR_NAIVE if m == "NAIVE" else bt.COR_FAMILIA[bt.familia(m)]
 
 
-def titulo_teste(modo, h):
+def titulo_teste(modo, h, unidade="semana"):
+    """unidade: "semana" ou "dia" (dia util com cotacao, usado na v5)."""
+    plural = "dia(s) util(eis)" if unidade == "dia" else "semana(s)"
     return "previsao unica feita no fim do treino" if modo == "cego" else \
-        f"previsao {h} semana(s) a frente, com o historico real ate cada semana"
+        f"previsao {h} {plural} a frente, com o historico real ate cada {unidade}"
 
 
-def grafico_visao_geral(prev, metricas, datas, y_original, s, modo, h, out, ini=0):
+def grafico_visao_geral(prev, metricas, datas, y_original, s, modo, h, out, ini=0, unidade="semana"):
     destaque = ["NAIVE"] + [metricas[metricas.familia == f].iloc[0].modelo
                             for f in [f for f in bt.FAMILIAS if f != "BASE"] if (metricas.familia == f).any()]
     fig, ax = plt.subplots(figsize=(13, 5.5))
@@ -218,7 +220,7 @@ def grafico_visao_geral(prev, metricas, datas, y_original, s, modo, h, out, ini=
         ax.annotate("fora da janela de treino", (datas.iloc[0], 0.97), xycoords=("data", "axes fraction"),
                     xytext=(6, 0), textcoords="offset points", fontsize=9, color="#52514e", va="top")
     bt.estilo(ax, f"Treino ({datas.iloc[ini].year}-{datas.iloc[s - 1].year}) e teste "
-                  f"({datas.iloc[s].year}-{datas.iloc[-1].year}): {titulo_teste(modo, h)}", "R$/saca 60 kg")
+                  f"({datas.iloc[s].year}-{datas.iloc[-1].year}): {titulo_teste(modo, h, unidade)}", "R$/saca 60 kg")
     ax.annotate("teste (20% finais)", (datas.iloc[s], 0.97), xycoords=("data", "axes fraction"),
                 xytext=(6, 0), textcoords="offset points", fontsize=9, color="#52514e", va="top")
     ax.legend(frameon=False, fontsize=9, loc="upper left")
@@ -227,7 +229,7 @@ def grafico_visao_geral(prev, metricas, datas, y_original, s, modo, h, out, ini=
     plt.close(fig)
 
 
-def grafico_todos(prev, metricas, datas, y_original, s, modo, h, out):
+def grafico_todos(prev, metricas, datas, y_original, s, modo, h, out, unidade="semana"):
     modelos = [m for m in metricas.sort_values("MAE_rel_naive").modelo]
     ncol = 4
     nlin = int(np.ceil(len(modelos) / ncol))
@@ -247,7 +249,7 @@ def grafico_todos(prev, metricas, datas, y_original, s, modo, h, out):
         ax.tick_params(labelsize=8)
     for ax in axes[len(modelos):]:
         ax.set_visible(False)
-    fig.suptitle(f"Todos os modelos no periodo de teste (preto = real), {titulo_teste(modo, h)}. "
+    fig.suptitle(f"Todos os modelos no periodo de teste (preto = real), {titulo_teste(modo, h, unidade)}. "
                  "Ordem: do menor para o maior erro.", x=0.01, ha="left", fontsize=11)
     fig.tight_layout()
     fig.savefig(out / "02_todos_os_modelos.png", dpi=140)
@@ -280,17 +282,17 @@ def grafico_ranking(metricas, out):
     plt.close(fig)
 
 
-def grafico_erro_no_tempo(prev, metricas, datas, out):
-    """Erro medio movel de 13 semanas: mostra em que periodos cada modelo falha."""
+def grafico_erro_no_tempo(prev, metricas, datas, out, janela=13, unidade="semanas"):
+    """Erro medio movel (padrao: 13 semanas): mostra em que periodos cada modelo falha."""
     destaque = ["NAIVE"] + [metricas[metricas.familia == f].iloc[0].modelo
                             for f in [f for f in bt.FAMILIAS if f != "BASE"] if (metricas.familia == f).any()]
     fig, ax = plt.subplots(figsize=(13, 4.8))
     for m in destaque:
         g = prev[prev.modelo == m].sort_values("alvo")
-        erro = (100 * (g.real - g.pred).abs() / g.real).rolling(13, min_periods=4).mean()
+        erro = (100 * (g.real - g.pred).abs() / g.real).rolling(janela, min_periods=max(2, janela // 3)).mean()
         ax.plot(datas.iloc[g.alvo], erro, color=cor_modelo(m), linewidth=1.8,
                 linestyle="--" if m == "NAIVE" else "-", label=m)
-    bt.estilo(ax, "Erro percentual medio das ultimas 13 semanas ao longo do teste", "Erro (%)")
+    bt.estilo(ax, f"Erro percentual medio das ultimas {janela} {unidade} ao longo do teste", "Erro (%)")
     ax.legend(frameon=False, fontsize=9, loc="upper right")
     fig.tight_layout()
     fig.savefig(out / "04_erro_ao_longo_do_tempo.png", dpi=160)
@@ -303,7 +305,7 @@ def grafico_erro_no_tempo(prev, metricas, datas, out):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data-file", default=RAIZ / "dados" / "milho_semanal.csv")
+    parser.add_argument("--data-file", default=RAIZ / "dados_milho" / "milho_semanal.csv")
     parser.add_argument("--target", default="media_pr")
     parser.add_argument("--treino", type=float, default=0.8, help="Fracao inicial da serie usada no treino.")
     parser.add_argument("--modo", choices=["passo", "cego"], default="passo")

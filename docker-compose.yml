@@ -1,0 +1,37 @@
+# Sobe a interface (http://localhost:8000) e o banco PostgreSQL:
+#   docker compose up --build        (a 1a vez demora alguns minutos: baixa torch e os modelos)
+#   docker compose down              (para; os dados ficam guardados nos volumes)
+#   docker compose down -v           (para e APAGA o banco e os modelos baixados)
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tcc
+      POSTGRES_PASSWORD: tcc
+      POSTGRES_DB: previsao
+    volumes:
+      - banco:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"   # para abrir o banco num cliente (DBeaver, pgAdmin): localhost:5433, usuario/senha tcc
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tcc -d previsao"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://tcc:tcc@db:5432/previsao
+    ports:
+      - "8000:8000"
+    volumes:
+      - modelos:/cache   # pesos do Chronos baixados do Hugging Face (so na 1a vez)
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  banco:
+  modelos:

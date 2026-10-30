@@ -1,7 +1,7 @@
 """Baixa o IPCA mensal (IBGE) da API publica do Banco Central (SGS, serie 433) e grava
-dados/ipca_mensal.csv com as colunas data (1o dia do mes) e variacao_percent (variacao no mes, %).
+dados_milho/ipca_mensal.csv com as colunas data (1o dia do mes) e variacao_percent (variacao no mes, %).
 
-Uso: .venv/bin/python dados/baixar_ipca.py      (ou: make ipca)
+Uso: .venv/bin/python dados_milho/baixar_ipca.py      (ou: make ipca)
 """
 import json
 import urllib.request
@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 AQUI = Path(__file__).resolve().parent
-URL = ("https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados"
+URL = ("https://api.bcb.gov.br/dados_milho/serie/bcdata.sgs.433/dados"
        "?formato=json&dataInicial=01/01/{ini}&dataFinal=31/12/{fim}")
 
 

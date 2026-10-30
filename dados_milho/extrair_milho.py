@@ -1,4 +1,4 @@
-"""Extrai as cotações de milho (SIMA/DERAL, R$/saca 60 kg, preço mais comum "M_C") de dados/brutos/sima/.
+"""Extrai as cotações de milho (SIMA/DERAL, R$/saca 60 kg, preço mais comum "M_C") de dados_milho/brutos/sima/.
 
 Formatos encontrados na base:
   - 2001-2022: um arquivo por mês (brutos/sima/sima AAAA/<mês>.xls), uma aba por dia.
@@ -8,10 +8,10 @@ Formatos encontrados na base:
 A linha do produto é "MILHO COMUM" (até ~2014) e depois "Milho amarelo tipo 1" — mesma série.
 
 Uso:
-    python dados/extrair_milho.py [pasta_base]    # padrão: dados/brutos/sima
+    python dados_milho/extrair_milho.py [pasta_base]    # padrão: dados_milho/brutos/sima
     # ou num notebook:
     from extrair_milho import carregar_milho, semanal
-    diario = carregar_milho("dados/brutos/sima")
+    diario = carregar_milho("dados_milho/brutos/sima")
     sem = semanal(diario)
 
 Requer: pip install pandas xlrd openpyxl

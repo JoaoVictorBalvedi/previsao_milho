@@ -1,0 +1,11 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+.ipynb_checkpoints
+notebooks
+app/previsao.db
+# planilhas brutas do SIMA (so servem para make dados) e resultados ja gerados
+dados_milho/brutos
+**/outputs*
+*.zip

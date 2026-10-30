@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Previsão de Preços</title>
+  <link rel="stylesheet" href="/static/estilo.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+  <header class="topo">
+    <div>
+      <h1>Previsão de preços agrícolas · Paraná</h1>
+      <p>Milho (SIMA/DERAL) e soja (CEPEA/ESALQ): teste nos dados que já aconteceram e previsão para frente</p>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="lateral">
+      <form id="form" class="painel" autocomplete="off">
+        <h2>Nova previsão</h2>
+
+        <div class="campo">
+          <span class="rotulo">Produto</span>
+          <div class="segmentado" data-campo="produto"></div>
+          <p class="dica" id="dica-produto"></p>
+        </div>
+
+        <div class="campo">
+          <span class="rotulo">Frequência da série</span>
+          <div class="segmentado" data-campo="frequencia"></div>
+        </div>
+
+        <div class="campo">
+          <span class="rotulo">Tipo de teste</span>
+          <div class="segmentado" data-campo="modo">
+            <button type="button" data-valor="passo">Passo a passo</button>
+            <button type="button" data-valor="cego">Cego</button>
+          </div>
+          <p class="dica" id="dica-modo"></p>
+        </div>
+
+        <div class="campo" id="campo-horizonte">
+          <label class="rotulo" for="horizonte">Prever quanto à frente</label>
+          <div class="linha">
+            <input type="number" id="horizonte" min="1" step="1" required>
+            <span id="unidade" class="unidade"></span>
+          </div>
+          <div class="chips" id="chips-horizonte"></div>
+        </div>
+
+        <div class="campo">
+          <span class="rotulo">Modelos</span>
+          <div class="chips" id="presets"></div>
+          <div id="modelos" class="modelos"></div>
+          <p class="dica">O NAIVE (repetir o último preço) sempre roda: é a referência. As combinações (COMBO_) saem sozinhas. Chronos é o mais lento.</p>
+        </div>
+
+        <details class="avancado">
+          <summary>Opções avançadas</summary>
+          <div class="campo">
+            <label class="rotulo" for="treino">Parte da série usada no treino: <strong id="treino-valor"></strong></label>
+            <input type="range" id="treino" min="0.5" max="0.95" step="0.05">
+            <p class="dica">O resto (o final da série) é o período de teste.</p>
+          </div>
+          <div class="campo">
+            <label class="rotulo" for="janela">Janela de treino (anos)</label>
+            <input type="number" id="janela" min="1" max="30" placeholder="todo o histórico">
+            <p class="dica">Treinar só com os últimos N anos antes do corte.</p>
+          </div>
+          <div class="campo">
+            <label class="rotulo" for="entrada">Janela de entrada (<span id="entrada-unidade"></span>)</label>
+            <input type="number" id="entrada" min="1" placeholder="padrão de cada modelo">
+            <p class="dica">Em cada previsão o modelo só enxerga os últimos N preços.</p>
+          </div>
+        </details>
+
+        <p class="erro" id="erro-form" hidden></p>
+        <div class="acoes">
+          <button type="submit" class="primario" id="prever">Prever</button>
+          <button type="button" class="secundario" id="retreinar">Treinar de novo</button>
+        </div>
+        <p class="dica">Se essa mesma previsão já foi feita, o resultado salvo aparece na hora, sem treinar. “Treinar de novo” ignora o salvo.</p>
+      </form>
+
+      <section class="painel">
+        <div class="titulo-painel">
+          <h2>Histórico</h2>
+          <button type="button" class="link" id="atualizar-historico">atualizar</button>
+        </div>
+        <ul id="historico" class="historico"></ul>
+      </section>
+
+      <section class="painel">
+        <h2>Dados no banco</h2>
+        <table class="tabela compacta" id="tabela-dados"></table>
+        <form id="form-soja" class="upload">
+          <label class="rotulo" for="planilha">Atualizar soja com uma planilha do CEPEA (.xls)</label>
+          <input type="file" id="planilha" accept=".xls,.xlsx">
+          <button type="submit" class="secundario">Enviar planilha</button>
+        </form>
+        <button type="button" class="link" id="reimportar">Recarregar todas as séries dos CSVs</button>
+        <p class="dica" id="msg-dados"></p>
+      </section>
+    </aside>
+
+    <main id="principal">
+      <section id="vazio" class="painel">
+        <h2 id="vazio-titulo"></h2>
+        <p class="dica" id="vazio-dica"></p>
+        <div class="grafico alto"><canvas id="grafico-serie"></canvas></div>
+        <p class="dica">Escolha as opções ao lado e clique em <strong>Prever</strong>. O teste usa o começo da série para treinar e compara com o final, que já aconteceu; depois os modelos são retreinados com tudo e preveem para frente.</p>
+      </section>
+
+      <section id="andamento" class="painel" hidden>
+        <div class="titulo-painel">
+          <h2 id="andamento-titulo">Treinando</h2>
+          <button type="button" class="secundario" id="cancelar">Cancelar</button>
+        </div>
+        <p id="andamento-resumo" class="resumo"></p>
+        <p id="andamento-status" class="status-linha"></p>
+        <pre id="andamento-log" class="log"></pre>
+      </section>
+
+      <section id="resultado" hidden>
+        <div class="painel faixa" id="faixa"></div>
+
+        <div class="kpis" id="kpis"></div>
+
+        <section class="painel" id="bloco-futuro">
+          <h2 id="titulo-futuro"></h2>
+          <p class="dica" id="dica-futuro"></p>
+          <div class="grafico"><canvas id="grafico-futuro"></canvas></div>
+          <div class="tabela-rolagem"><table class="tabela" id="tabela-futuro"></table></div>
+        </section>
+
+        <section class="painel">
+          <h2 id="titulo-teste"></h2>
+          <p class="dica" id="dica-teste"></p>
+          <div class="grafico alto"><canvas id="grafico-teste"></canvas></div>
+        </section>
+
+        <section class="painel">
+          <h2>Desempenho no período de teste</h2>
+          <p class="dica">Erro relativo = erro do modelo ÷ erro de repetir o último preço (NAIVE). Abaixo de 1 o modelo ganha. “Melhor/pior” = diferença significativa no teste de Diebold-Mariano (p &lt; 0,05). Marque a caixa para mostrar o modelo nos gráficos.</p>
+          <div class="tabela-rolagem"><table class="tabela" id="tabela-metricas"></table></div>
+        </section>
+
+        <section class="painel">
+          <h2>Gráficos gerados pelo script</h2>
+          <div class="galeria" id="galeria"></div>
+        </section>
+
+        <section class="painel">
+          <h2>Baixar</h2>
+          <div class="chips" id="downloads"></div>
+          <details>
+            <summary>Log do treino</summary>
+            <pre class="log" id="resultado-log"></pre>
+          </details>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

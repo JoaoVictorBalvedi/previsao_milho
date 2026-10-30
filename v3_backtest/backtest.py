@@ -655,7 +655,7 @@ def grafico_futuro_chronos(futuros, todos, datas, y_original, out):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data-file", default=RAIZ / "dados" / "milho_semanal.csv")
+    parser.add_argument("--data-file", default=RAIZ / "dados_milho" / "milho_semanal.csv")
     parser.add_argument("--target", default="media_pr")
     parser.add_argument("--output-dir", default=None,
                         help="Padrao: v3_backtest/outputs[_janelaN][_entradaN]")

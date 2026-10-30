@@ -3,9 +3,15 @@ pandas
 numpy
 scikit-learn
 matplotlib
-xlrd          # leitura dos .xls do SIMA (dados/extrair_milho.py)
+xlrd          # leitura dos .xls do SIMA (dados_milho/extrair_milho.py)
 openpyxl      # leitura dos .xlsx do SIMA
 torch
 chronos-forecasting
 xgboost       # modelos do professor (no Mac: brew install libomp)
 lightgbm
+# interface web (app/)
+fastapi
+uvicorn
+sqlalchemy
+psycopg[binary]   # PostgreSQL (docker compose)
+python-multipart  # envio da planilha do CEPEA
