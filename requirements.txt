@@ -1,0 +1,11 @@
+# Python 3.12 (o 3.14 do sistema ainda nao tem torch/chronos estaveis)
+pandas
+numpy
+scikit-learn
+matplotlib
+xlrd          # leitura dos .xls do SIMA (dados/extrair_milho.py)
+openpyxl      # leitura dos .xlsx do SIMA
+torch
+chronos-forecasting
+xgboost       # modelos do professor (no Mac: brew install libomp)
+lightgbm
