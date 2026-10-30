@@ -1,0 +1,23 @@
+ToRun.txt
+
+1) Gerar arquivo granularizado
+python ReduzirGranilaridade.py
+
+Gera arquivo com sufixo _GRAN.csv
+
+
+2) Editar gran_files.txt
+Mesmo diretório do run_all_next50.py
+
+Formato:
+temp|CAMINHO_COMPLETO_ARQUIVO_GRAN.csv
+
+Um arquivo por linha
+
+
+3) Rodar previsão Next 50
+python run_all_next50.py
+
+
+Saída:
+outputs_next50/ml/
